@@ -1,6 +1,7 @@
 import streamlit as st
 import sqlite3
 from datetime import datetime
+import os
 
 # ================= CONFIG =================
 st.set_page_config(page_title="DataMaster Pro", layout="wide", page_icon="🛡️")
@@ -30,40 +31,50 @@ h1, h2, h3 {color:#00c6ff;}
 
 # ================= DB =================
 def connect_db():
+    # Utilisation d'un chemin relatif pour SQLite sur Render
     return sqlite3.connect("datamaster.db", check_same_thread=False)
 
-conn = connect_db()
-c = conn.cursor()
+def init_db():
+    conn = connect_db()
+    c = conn.cursor()
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS data(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nom TEXT,
+        contact TEXT,
+        secteur TEXT,
+        note TEXT,
+        created_at TEXT
+    )
+    """)
+    conn.commit()
+    conn.close()
 
-c.execute("""
-CREATE TABLE IF NOT EXISTS data(
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    nom TEXT,
-    contact TEXT,
-    secteur TEXT,
-    note TEXT,
-    created_at TEXT
-)
-""")
-conn.commit()
+# Initialisation au lancement
+init_db()
 
 # ================= DASHBOARD =================
 def dashboard():
     st.title("📊 Tableau de bord professionnel")
-
+    
+    conn = connect_db()
+    c = conn.cursor()
     c.execute("SELECT COUNT(*) FROM data")
     total = c.fetchone()[0]
 
     col1, col2, col3 = st.columns(3)
     col1.metric("Total des fiches", total)
     col2.metric("Statut système", "En ligne")
-    col3.metric("Mode", "Libre")
+    col3.metric("Mode", "Hébergé")
 
     st.markdown("---")
     st.subheader("📌 Dernières données")
 
     c.execute("SELECT * FROM data ORDER BY id DESC LIMIT 5")
-    for d in c.fetchall():
+    rows = c.fetchall()
+    conn.close()
+
+    for d in rows:
         st.markdown(f"""
         <div class='card'>
         <b>{d[1]}</b><br>
@@ -84,9 +95,12 @@ def add_data():
 
         if st.form_submit_button("Enregistrer"):
             if nom and contact:
+                conn = connect_db()
+                c = conn.cursor()
                 c.execute("INSERT INTO data(nom,contact,secteur,note,created_at) VALUES(?,?,?,?,?)",
                           (nom, contact, secteur, note, datetime.now().strftime("%d/%m/%Y %H:%M")))
                 conn.commit()
+                conn.close()
                 st.success("✅ Donnée enregistrée avec succès")
             else:
                 st.error("⚠️ Champs obligatoires manquants")
@@ -94,12 +108,15 @@ def add_data():
 # ================= GESTION =================
 def manage():
     st.title("⚙️ Centre de gestion")
-
     tab1, tab2, tab3 = st.tabs(["📄 Voir","✏️ Modifier","🗑️ Supprimer"])
+
+    conn = connect_db()
+    c = conn.cursor()
 
     with tab1:
         c.execute("SELECT * FROM data ORDER BY id DESC")
-        for d in c.fetchall():
+        rows = c.fetchall()
+        for d in rows:
             st.markdown(f"""
             <div class='card'>
             <b>ID {d[0]} - {d[1]}</b><br>
@@ -111,7 +128,6 @@ def manage():
     with tab2:
         idm = st.number_input("ID à modifier", min_value=1)
         new = st.text_input("Nouveau nom")
-
         if st.button("Mettre à jour"):
             if new:
                 c.execute("UPDATE data SET nom=? WHERE id=?", (new, idm))
@@ -123,7 +139,6 @@ def manage():
     with tab3:
         idd = st.number_input("ID à supprimer", min_value=1)
         confirm = st.checkbox("Confirmer la suppression")
-
         if st.button("Supprimer définitivement"):
             if confirm:
                 c.execute("DELETE FROM data WHERE id=?", (idd,))
@@ -131,6 +146,7 @@ def manage():
                 st.warning("🗑️ Donnée supprimée")
             else:
                 st.error("Veuillez confirmer")
+    conn.close()
 
 # ================= MAIN =================
 with st.sidebar:
@@ -143,4 +159,3 @@ elif menu == "Ajouter":
     add_data()
 elif menu == "Gestion":
     manage()
-

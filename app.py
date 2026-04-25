@@ -1,142 +1,95 @@
 import streamlit as st
-import sqlite3
 import pandas as pd
-from datetime import datetime
 
-# ================= CONFIG =================
-st.set_page_config(page_title="DataStudy Pro", layout="wide", page_icon="📊")
+st.set_page_config(page_title="DataMaster Pro", layout="wide")
 
-# ================= STYLE =================
-st.markdown("""
-<style>
-body {background-color:#0e1117;color:white;}
-h1, h2 {color:#00c6ff;}
-.stButton>button {
-    background: linear-gradient(90deg,#00c6ff,#0072ff);
-    color:white;
-    border:none;
-    border-radius:10px;
-    height:3em;
-    font-weight:bold;
-}
-</style>
-""", unsafe_allow_html=True)
+# ===================== TITLE =====================
+st.title("📊 DataMaster Pro - Système de collecte & analyse")
+st.markdown("Application intelligente de collecte et d'analyse de données")
 
+# ===================== INIT DATA =====================
+if "data" not in st.session_state:
+    st.session_state.data = []
 
-# ================= DB =================
-def connect_db():
-    return sqlite3.connect("datastudy.db", check_same_thread=False)
+# ===================== FORM =====================
+st.subheader("📝 Formulaire de collecte")
 
-def init_db():
-    conn = connect_db()
-    c = conn.cursor()
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS data(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nom TEXT,
-        age INTEGER,
-        sexe TEXT,
-        niveau TEXT,
-        ville TEXT,
-        profession TEXT,
-        satisfaction INTEGER,
-        commentaire TEXT,
-        created_at TEXT
-    )
-    """)
-    conn.commit()
-    conn.close()
+col1, col2, col3 = st.columns(3)
 
-init_db()
+with st.form("form"):
+    with col1:
+        nom = st.text_input("👤 Nom complet")
+        age = st.number_input("🎂 Âge", min_value=0, max_value=120)
 
-# ================= COLLECTE =================
-def collect():
-    st.title("📥 Collecte de données (Étude)")
+    with col2:
+        sexe = st.selectbox("⚧ Sexe", ["Homme", "Femme", "Autre"])
+        ville = st.text_input("🏙️ Ville")
 
-    with st.form("form"):
-        nom = st.text_input("Nom (optionnel)")
-        age = st.number_input("Âge", min_value=10, max_value=100)
-        sexe = st.selectbox("Sexe", ["Homme","Femme"])
-        niveau = st.selectbox("Niveau d'étude", ["Secondaire","Licence","Master","Doctorat"])
-        ville = st.text_input("Ville")
-        profession = st.text_input("Profession")
-        satisfaction = st.slider("Niveau de satisfaction", 1, 5)
-        commentaire = st.text_area("Commentaire")
+    with col3:
+        niveau = st.selectbox("🎓 Niveau d'étude", [
+            "Primaire", "Secondaire", "Université", "Autre"
+        ])
+        profession = st.text_input("💼 Profession")
 
-        if st.form_submit_button("Enregistrer"):
-            conn = connect_db()
-            c = conn.cursor()
-            c.execute("""
-            INSERT INTO data(nom,age,sexe,niveau,ville,profession,satisfaction,commentaire,created_at)
-            VALUES(?,?,?,?,?,?,?,?,?)
-            """, (
-                nom, age, sexe, niveau, ville, profession,
-                satisfaction, commentaire,
-                datetime.now().strftime("%d/%m/%Y %H:%M")
-            ))
-            conn.commit()
-            conn.close()
+    submit = st.form_submit_button("🚀 Envoyer les données")
 
-            st.success("✅ Donnée enregistrée")
+# ===================== SAVE =====================
+if submit:
+    st.session_state.data.append({
+        "Nom": nom,
+        "Âge": age,
+        "Sexe": sexe,
+        "Ville": ville,
+        "Niveau": niveau,
+        "Profession": profession
+    })
+    st.success("✅ Données enregistrées avec succès !")
 
-# ================= DASHBOARD =================
-def dashboard():
-    st.title("📊 Analyse statistique")
+# ===================== DATAFRAME =====================
+if st.session_state.data:
+    df = pd.DataFrame(st.session_state.data)
 
-    conn = connect_db()
-    df = pd.read_sql_query("SELECT * FROM data", conn)
+    st.divider()
+    st.subheader("📋 Données collectées")
 
-    if df.empty:
-        st.warning("Aucune donnée disponible")
-        return
+    st.dataframe(df, use_container_width=True)
 
-    # ===== METRICS =====
+    # ===================== METRICS =====================
+    st.subheader("📊 Indicateurs clés")
+
     col1, col2, col3 = st.columns(3)
-    col1.metric("Total", len(df))
-    col2.metric("Âge moyen", round(df["age"].mean(), 1))
-    col3.metric("Satisfaction moyenne", round(df["satisfaction"].mean(), 1))
 
-    st.markdown("---")
+    col1.metric("👥 Total participants", len(df))
+    col2.metric("🎂 Âge moyen", round(df["Âge"].mean(), 1))
+    col3.metric("🏙️ Villes uniques", df["Ville"].nunique())
 
-    # ===== GRAPHIQUES =====
-    st.subheader("Répartition par sexe")
-    st.bar_chart(df["sexe"].value_counts())
+    # ===================== GRAPHS =====================
+    st.subheader("📈 Analyse graphique")
 
-    st.subheader("Niveau d'étude")
-    st.bar_chart(df["niveau"].value_counts())
+    col1, col2 = st.columns(2)
 
-    st.subheader("Répartition par ville")
-    st.bar_chart(df["ville"].value_counts())
+    with col1:
+        st.markdown("### 👥 Répartition par sexe")
+        st.bar_chart(df["Sexe"].value_counts())
 
-    st.subheader("Satisfaction")
-    st.bar_chart(df["satisfaction"].value_counts())
+    with col2:
+        st.markdown("### 🎓 Niveau d'étude")
+        st.bar_chart(df["Niveau"].value_counts())
 
-    # ===== TABLE =====
-    st.subheader("Données collectées")
-    st.dataframe(df)
+    st.markdown("### 🎂 Distribution des âges")
+    st.bar_chart(df["Âge"])
 
-    # ===== EXPORT =====
-    csv = df.to_csv(index=False).encode('utf-8')
-    st.download_button("📥 Télécharger CSV", csv, "donnees.csv", "text/csv")
+    # ===================== DOWNLOAD =====================
+    st.subheader("📥 Export des données")
 
-    df.to_excel("donnees.xlsx", index=False)
-    with open("donnees.xlsx", "rb") as f:
-        st.download_button("📥 Télécharger Excel", f, "donnees.xlsx")
+    csv = df.to_csv(index=False).encode("utf-8")
 
-    conn.close()
+    st.download_button(
+        "⬇️ Télécharger en CSV",
+        csv,
+        "donnees.csv",
+        "text/csv"
+    )
 
-# ================= MAIN =================
-if not st.session_state["auth"]:
-    login()
 else:
-    with st.sidebar:
-        st.title("📊 DataStudy Pro")
-        menu = st.radio("Menu", ["Collecte","Analyse","Déconnexion"])
-
-    if menu == "Collecte":
-        collect()
-    elif menu == "Analyse":
-        dashboard()
-    elif menu == "Déconnexion":
-        st.session_state["auth"] = False
-        st.experimental_rerun()
+    st.info("ℹ️ Aucune donnée pour le moment. Remplis le formulaire 👆")

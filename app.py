@@ -22,20 +22,6 @@ h1, h2 {color:#00c6ff;}
 </style>
 """, unsafe_allow_html=True)
 
-# ================= AUTH =================
-def login():
-    st.title("🔐 Connexion Admin")
-    user = st.text_input("Utilisateur")
-    pwd = st.text_input("Mot de passe", type="password")
-
-    if st.button("Se connecter"):
-        if user == "admin" and pwd == "1234":
-            st.session_state["auth"] = True
-        else:
-            st.error("Identifiants incorrects")
-
-if "auth" not in st.session_state:
-    st.session_state["auth"] = False
 
 # ================= DB =================
 def connect_db():

@@ -1,16 +1,16 @@
 import streamlit as st
 import sqlite3
+import pandas as pd
 from datetime import datetime
-import os
 
 # ================= CONFIG =================
-st.set_page_config(page_title="DataMaster Pro", layout="wide", page_icon="🛡️")
+st.set_page_config(page_title="DataStudy Pro", layout="wide", page_icon="📊")
 
-# ================= STYLE PRO =================
+# ================= STYLE =================
 st.markdown("""
 <style>
 body {background-color:#0e1117;color:white;}
-h1, h2, h3 {color:#00c6ff;}
+h1, h2 {color:#00c6ff;}
 .stButton>button {
     background: linear-gradient(90deg,#00c6ff,#0072ff);
     color:white;
@@ -19,20 +19,27 @@ h1, h2, h3 {color:#00c6ff;}
     height:3em;
     font-weight:bold;
 }
-.card {
-    padding:20px;
-    border-radius:12px;
-    background:#161b22;
-    margin:10px 0;
-    box-shadow:0 4px 10px rgba(0,0,0,0.4);
-}
 </style>
 """, unsafe_allow_html=True)
 
+# ================= AUTH =================
+def login():
+    st.title("🔐 Connexion Admin")
+    user = st.text_input("Utilisateur")
+    pwd = st.text_input("Mot de passe", type="password")
+
+    if st.button("Se connecter"):
+        if user == "admin" and pwd == "1234":
+            st.session_state["auth"] = True
+        else:
+            st.error("Identifiants incorrects")
+
+if "auth" not in st.session_state:
+    st.session_state["auth"] = False
+
 # ================= DB =================
 def connect_db():
-    # Utilisation d'un chemin relatif pour SQLite sur Render
-    return sqlite3.connect("datamaster.db", check_same_thread=False)
+    return sqlite3.connect("datastudy.db", check_same_thread=False)
 
 def init_db():
     conn = connect_db()
@@ -41,121 +48,109 @@ def init_db():
     CREATE TABLE IF NOT EXISTS data(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nom TEXT,
-        contact TEXT,
-        secteur TEXT,
-        note TEXT,
+        age INTEGER,
+        sexe TEXT,
+        niveau TEXT,
+        ville TEXT,
+        profession TEXT,
+        satisfaction INTEGER,
+        commentaire TEXT,
         created_at TEXT
     )
     """)
     conn.commit()
     conn.close()
 
-# Initialisation au lancement
 init_db()
+
+# ================= COLLECTE =================
+def collect():
+    st.title("📥 Collecte de données (Étude)")
+
+    with st.form("form"):
+        nom = st.text_input("Nom (optionnel)")
+        age = st.number_input("Âge", min_value=10, max_value=100)
+        sexe = st.selectbox("Sexe", ["Homme","Femme"])
+        niveau = st.selectbox("Niveau d'étude", ["Secondaire","Licence","Master","Doctorat"])
+        ville = st.text_input("Ville")
+        profession = st.text_input("Profession")
+        satisfaction = st.slider("Niveau de satisfaction", 1, 5)
+        commentaire = st.text_area("Commentaire")
+
+        if st.form_submit_button("Enregistrer"):
+            conn = connect_db()
+            c = conn.cursor()
+            c.execute("""
+            INSERT INTO data(nom,age,sexe,niveau,ville,profession,satisfaction,commentaire,created_at)
+            VALUES(?,?,?,?,?,?,?,?,?)
+            """, (
+                nom, age, sexe, niveau, ville, profession,
+                satisfaction, commentaire,
+                datetime.now().strftime("%d/%m/%Y %H:%M")
+            ))
+            conn.commit()
+            conn.close()
+
+            st.success("✅ Donnée enregistrée")
 
 # ================= DASHBOARD =================
 def dashboard():
-    st.title("📊 Tableau de bord professionnel")
-    
-    conn = connect_db()
-    c = conn.cursor()
-    c.execute("SELECT COUNT(*) FROM data")
-    total = c.fetchone()[0]
+    st.title("📊 Analyse statistique")
 
+    conn = connect_db()
+    df = pd.read_sql_query("SELECT * FROM data", conn)
+
+    if df.empty:
+        st.warning("Aucune donnée disponible")
+        return
+
+    # ===== METRICS =====
     col1, col2, col3 = st.columns(3)
-    col1.metric("Total des fiches", total)
-    col2.metric("Statut système", "En ligne")
-    col3.metric("Mode", "Hébergé")
+    col1.metric("Total", len(df))
+    col2.metric("Âge moyen", round(df["age"].mean(), 1))
+    col3.metric("Satisfaction moyenne", round(df["satisfaction"].mean(), 1))
 
     st.markdown("---")
-    st.subheader("📌 Dernières données")
 
-    c.execute("SELECT * FROM data ORDER BY id DESC LIMIT 5")
-    rows = c.fetchall()
-    conn.close()
+    # ===== GRAPHIQUES =====
+    st.subheader("Répartition par sexe")
+    st.bar_chart(df["sexe"].value_counts())
 
-    for d in rows:
-        st.markdown(f"""
-        <div class='card'>
-        <b>{d[1]}</b><br>
-        📞 {d[2]} | 🏢 {d[3]}<br>
-        <small>📅 {d[5]}</small>
-        </div>
-        """, unsafe_allow_html=True)
+    st.subheader("Niveau d'étude")
+    st.bar_chart(df["niveau"].value_counts())
 
-# ================= AJOUT =================
-def add_data():
-    st.title("📥 Ajouter une nouvelle fiche")
+    st.subheader("Répartition par ville")
+    st.bar_chart(df["ville"].value_counts())
 
-    with st.form("ajout"):
-        nom = st.text_input("Nom")
-        contact = st.text_input("Contact")
-        secteur = st.selectbox("Secteur", ["Informatique","Finance","Éducation","Business"])
-        note = st.text_area("Note")
+    st.subheader("Satisfaction")
+    st.bar_chart(df["satisfaction"].value_counts())
 
-        if st.form_submit_button("Enregistrer"):
-            if nom and contact:
-                conn = connect_db()
-                c = conn.cursor()
-                c.execute("INSERT INTO data(nom,contact,secteur,note,created_at) VALUES(?,?,?,?,?)",
-                          (nom, contact, secteur, note, datetime.now().strftime("%d/%m/%Y %H:%M")))
-                conn.commit()
-                conn.close()
-                st.success("✅ Donnée enregistrée avec succès")
-            else:
-                st.error("⚠️ Champs obligatoires manquants")
+    # ===== TABLE =====
+    st.subheader("Données collectées")
+    st.dataframe(df)
 
-# ================= GESTION =================
-def manage():
-    st.title("⚙️ Centre de gestion")
-    tab1, tab2, tab3 = st.tabs(["📄 Voir","✏️ Modifier","🗑️ Supprimer"])
+    # ===== EXPORT =====
+    csv = df.to_csv(index=False).encode('utf-8')
+    st.download_button("📥 Télécharger CSV", csv, "donnees.csv", "text/csv")
 
-    conn = connect_db()
-    c = conn.cursor()
+    df.to_excel("donnees.xlsx", index=False)
+    with open("donnees.xlsx", "rb") as f:
+        st.download_button("📥 Télécharger Excel", f, "donnees.xlsx")
 
-    with tab1:
-        c.execute("SELECT * FROM data ORDER BY id DESC")
-        rows = c.fetchall()
-        for d in rows:
-            st.markdown(f"""
-            <div class='card'>
-            <b>ID {d[0]} - {d[1]}</b><br>
-            📞 {d[2]} | 🏢 {d[3]}<br>
-            📝 {d[4]}
-            </div>
-            """, unsafe_allow_html=True)
-
-    with tab2:
-        idm = st.number_input("ID à modifier", min_value=1)
-        new = st.text_input("Nouveau nom")
-        if st.button("Mettre à jour"):
-            if new:
-                c.execute("UPDATE data SET nom=? WHERE id=?", (new, idm))
-                conn.commit()
-                st.success("✅ Mise à jour réussie")
-            else:
-                st.error("Champ vide")
-
-    with tab3:
-        idd = st.number_input("ID à supprimer", min_value=1)
-        confirm = st.checkbox("Confirmer la suppression")
-        if st.button("Supprimer définitivement"):
-            if confirm:
-                c.execute("DELETE FROM data WHERE id=?", (idd,))
-                conn.commit()
-                st.warning("🗑️ Donnée supprimée")
-            else:
-                st.error("Veuillez confirmer")
     conn.close()
 
 # ================= MAIN =================
-with st.sidebar:
-    st.title("🚀 DataMaster Pro")
-    menu = st.radio("Navigation", ["Dashboard","Ajouter","Gestion"])
+if not st.session_state["auth"]:
+    login()
+else:
+    with st.sidebar:
+        st.title("📊 DataStudy Pro")
+        menu = st.radio("Menu", ["Collecte","Analyse","Déconnexion"])
 
-if menu == "Dashboard":
-    dashboard()
-elif menu == "Ajouter":
-    add_data()
-elif menu == "Gestion":
-    manage()
+    if menu == "Collecte":
+        collect()
+    elif menu == "Analyse":
+        dashboard()
+    elif menu == "Déconnexion":
+        st.session_state["auth"] = False
+        st.experimental_rerun()
